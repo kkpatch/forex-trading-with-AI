@@ -173,14 +173,32 @@ input int ma_shift = 0;                //Bollinger Bands: Shift
 input double bband_deviation = 2.000;  //Bollinger Bands: Deviaation
 
 input double volumn = 0.1;             //Order: Volumn(lot) 
-input int StopLoss = 2500;             //Order: Stop Loss(Point)                
+input int StopLoss = 2500;             //Order: Stop Loss(Point)    
+input string filename = "profit.csv";      //FileName:             
 int Count = 0;
 int bar1 = 0;
+
+//---
+int filehandle;
+string tmpDate = "";
+string date = "";
+int count = 1;
+double Balance = AccountInfoDouble(ACCOUNT_BALANCE);
+double profit;
+double tmpProfit = 0;
+double eq ;
+//---
 
 int OnInit()
   {
 //---
-   
+   ResetLastError();
+   filehandle=FileOpen(filename,FILE_WRITE|FILE_CSV);
+   if(filehandle!=INVALID_HANDLE)
+     {      
+      Print("File opened correctly");
+     }
+   else Print("Error in opening file,",GetLastError());
 //---
    return(INIT_SUCCEEDED);
   }
@@ -190,7 +208,10 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   
+   if(profit-tmpProfit!=0){ 
+      FileWrite(filehandle,tmpDate,NormalizeDouble(profit-tmpProfit,2));
+      FileClose(filehandle);
+   }
   }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -198,7 +219,22 @@ void OnDeinit(const int reason)
 void OnTick()
   {
 //---
-    double Ask = NormalizeDouble(SymbolInfoDouble(_Symbol,SYMBOL_ASK),_Digits);
+   datetime timeLocal = TimeLocal(); 
+   date = TimeToString(timeLocal,TIME_DATE);
+   if(tmpDate != date && tmpDate != ""){
+      if(profit-tmpProfit!=0){    
+         FileWrite(filehandle,tmpDate,NormalizeDouble(profit-tmpProfit,2));
+         tmpProfit = profit;
+         count++;
+      }
+   }
+   else
+   {
+      eq = AccountInfoDouble(ACCOUNT_EQUITY);
+      profit = eq - Balance;
+   }
+
+   double Ask = NormalizeDouble(SymbolInfoDouble(_Symbol,SYMBOL_ASK),_Digits);
    
    double Bid = NormalizeDouble(SymbolInfoDouble(_Symbol,SYMBOL_BID),_Digits);
    
@@ -315,6 +351,7 @@ void OnTick()
    //           );
    //}
    //Comment(bar1);
+   tmpDate = date;
   }
   
 //+------------------------------------------------------------------+
@@ -341,4 +378,3 @@ void CloseAll()
          trade.PositionClose(PositionGetTicket(i));
       }
    }
-
