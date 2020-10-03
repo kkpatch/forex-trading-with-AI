@@ -82,6 +82,8 @@ void OnTick()
    int NumberOfCandles = Bars(_Symbol,_Period);
    string NumberOfCandlesText2 = IntegerToString(NumberOfCandles*2);
    
+   int CandleNumber = Bars(_Symbol,_Period);
+   
   //--- ADX Setup 
    double PriceArray[];
    double UpperBandArray[];
@@ -136,7 +138,10 @@ void OnTick()
             //if(UpperBandArray[0] > UpperBandArray[1] && LowerBandArray[0] < LowerBandArray[1]){
                //if(UpperBandArray[0] - LowerBandArray[0] > UpperBandArray[1] - LowerBandArray[1]){
                if(myRSIArray[0] > 50 ){
-                     adx_status = "buy";
+                     if(stoploss == 0) SL = stoploss;
+                     else SL = (Ask-stoploss*_Point);
+                     trade.Buy(0.1,NULL,Ask,SL,(Ask+250*_Point),NULL);
+                     adx_status = "";
                      //if(PositionsTotal()==0)
                      //trade.Buy(0.1,NULL,Ask,0,(Ask+250*_Point),NULL);
                   }
@@ -145,13 +150,11 @@ void OnTick()
          //}
          }
        }
-       if(UpperBandArray[0] < LowerBandArray[0] && UpperBandArray[1] > LowerBandArray[1]){adx_status = "sell";CloseAll();} 
-       if(adx_status == "buy"){
-         if(stoploss == 0) SL = stoploss;
-         else SL = (Ask-stoploss*_Point);
-         trade.Buy(0.1,NULL,Ask,SL,(Ask+250*_Point),NULL);
-         adx_status = "";
-          
+       if(CheckForNewCandle(CandleNumber) == "YES, A NEW CANDLE APPEARED!"){
+         if(UpperBandArray[1] < LowerBandArray[1] && UpperBandArray[2] > LowerBandArray[2]){
+            adx_status = "sell";
+            CloseAll();
+            } 
        }
            
       // if(UpperBandArray[0] < LowerBandArray[0] && UpperBandArray[1] > LowerBandArray[1]){
@@ -206,4 +209,19 @@ void CloseAll()
          PositionSelectByTicket(PositionGetTicket(i));
          trade.PositionClose(PositionGetTicket(i));
       }
+   }
+   
+ string CheckForNewCandle(int CandleNumber)
+   {
+      static int LastCandleNumber;
+      
+      string IsNewCandle = "no new candle";
+      
+      if(CandleNumber>LastCandleNumber)
+      {
+         IsNewCandle = "YES, A NEW CANDLE APPEARED!";
+         LastCandleNumber = CandleNumber;
+      }
+      
+      return IsNewCandle;
    }
