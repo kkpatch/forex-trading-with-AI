@@ -3,9 +3,9 @@
 CTrade trade;   
 int status = 0;
 
-input string filename = "profit_IcMarket.csv";      //FileName: 
+//--- file variable
+int filehandle;         //profit each day
 
-int filehandle;
 string tmpDate = "";
 string date = "";
 int count = 1;
@@ -13,11 +13,23 @@ double Balance = AccountInfoDouble(ACCOUNT_BALANCE);
 double profit;
 double tmpProfit = 0;
 double eq ;
+//---
 
+int filehandle2;        //profit each order
+input string filename  = "profit_ADX+RSI_DailyProfit.csv";        //FileName: 
+input string filename2 = "profit_ADX+RSI_EachOrder.csv";          //FileName2: 
 double SL;
-input int stoploss = 0;     //Stoploss: 
+input int stoploss = 1500;       //StopLoss: 
+double TP;
+input int takeprofit = 250;     //TakeProfit: 
+double price;
+datetime openTime;
+datetime closeTime;
 
-string adx_status = "";
+string   adx_status = "";
+
+bool     OrderOpen = false;
+
 int OnInit()
   {
 //---
@@ -28,6 +40,16 @@ int OnInit()
       Print("File opened correctly");
      }
    else Print("Error in opening file,",GetLastError());
+   filehandle2=FileOpen(filename2,FILE_WRITE|FILE_CSV);
+   if(filehandle2!=INVALID_HANDLE)
+     {      
+      Print("File opened correctly");
+     }
+   else Print("Error in opening file,",GetLastError());
+   
+   FileWrite(filehandle,"Date","Profit");
+   FileWrite(filehandle2,"OpenTime","CloseTime","OpenPrice","ClosePrice","StopLoss","TakeProfit","OrderProfit","Info");
+
 
 //---
    return(INIT_SUCCEEDED);
@@ -35,16 +57,16 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   if(profit-tmpProfit!=0){ 
-      FileWrite(filehandle,tmpDate,NormalizeDouble(profit-tmpProfit,2));
-      
-   }FileClose(filehandle);
+   //if(profit-tmpProfit!=0){ 
+   //   FileWrite(filehandle,tmpDate,NormalizeDouble(profit-tmpProfit,2));     
+   //}
+   FileClose(filehandle);
+   FileClose(filehandle2);
   }
 
 
-void OnTick()
-  {
-
+void OnTick() 
+   {
   //--- Draw Object Setup
    datetime timeCurrent = TimeCurrent(); 
    string time = TimeToString(timeCurrent,TIME_SECONDS);   
@@ -84,7 +106,7 @@ void OnTick()
    
    int CandleNumber = Bars(_Symbol,_Period);
    
-  //--- ADX Setup 
+   //--- ADX Setup 
    double PriceArray[];
    double UpperBandArray[];
    double LowerBandArray[];
@@ -126,12 +148,22 @@ void OnTick()
       ObjectSetInteger(0,TimeCurrent(),OBJPROP_COLOR,clrBlue);   
       ObjectSetInteger(0,TimeCurrent(),OBJPROP_FILL,clrBlue);   
       status = 1;
-      CloseAll();
+      if(PositionsTotal() == 1){
+         CloseAll();
+         InfoEachOrder("Close in 00:00");
+         OrderOpen = false;
+      }
+      
+      
    }
    //---
    
    if(StringSubstr(time,0,5)>="14:00" && StringSubstr(time,0,5)<="19:59"){
       if(PositionsTotal()==0){
+      if(OrderOpen == true){         
+         InfoEachOrder("SL/TP");         
+         OrderOpen = false;
+       }
       if(UpperBandArray[0] > LowerBandArray[0] && UpperBandArray[1] < LowerBandArray[1]){
          if(PriceArray[0] > 25 )
             //if(ADXValue0 > ADXValue1)
@@ -139,9 +171,14 @@ void OnTick()
                //if(UpperBandArray[0] - LowerBandArray[0] > UpperBandArray[1] - LowerBandArray[1]){
                if(myRSIArray[0] > 50 ){
                      if(stoploss == 0) SL = stoploss;
-                     else SL = (Ask-stoploss*_Point);
-                     trade.Buy(0.1,NULL,Ask,SL,(Ask+250*_Point),NULL);
+                     if(stoploss != 0) SL = (Ask-stoploss*_Point);
+                     if(takeprofit == 0) TP = stoploss;
+                     if(takeprofit != 0) TP = (Ask+takeprofit*_Point);
+                     price = Ask;
+                     trade.Buy(0.1,NULL,Ask,SL,TP,NULL);
                      adx_status = "";
+                     OrderOpen = true;
+                     openTime = timeCurrent;
                      //if(PositionsTotal()==0)
                      //trade.Buy(0.1,NULL,Ask,0,(Ask+250*_Point),NULL);
                   }
@@ -150,13 +187,15 @@ void OnTick()
          //}
          }
        }
+       
        if(CheckForNewCandle(CandleNumber) == "YES, A NEW CANDLE APPEARED!"){
-         if(UpperBandArray[1] < LowerBandArray[1] && UpperBandArray[2] > LowerBandArray[2]){
+         if(UpperBandArray[1] < LowerBandArray[1] && UpperBandArray[2] > LowerBandArray[2] && OrderOpen == true){
             adx_status = "sell";
             CloseAll();
+            InfoEachOrder("ADX Signal: SELL");
+            OrderOpen = false;
             } 
-       }
-           
+       }           
       // if(UpperBandArray[0] < LowerBandArray[0] && UpperBandArray[1] > LowerBandArray[1]){
       //    if(PriceArray[0] > 25)
       //      //if(ADXValue0 > ADXValue1)
@@ -177,7 +216,7 @@ void OnTick()
       //}
       }
       //Comment(adx_status);   
-
+      //Comment(OrderOpen);
 
 
 
@@ -225,3 +264,36 @@ void CloseAll()
       
       return IsNewCandle;
    }
+ void InfoEachOrder(string info)
+   {
+   uint     TotalNumberOfDeals;
+   ulong    TicketNumber = 0;
+   double   openPrice = 0;
+   double   stoplosss = 0;
+   double   takeprofitt = 0;
+   double   OrderProfit = 0;
+   double   closePrice = 0;
+
+   closeTime = TimeCurrent();
+   HistorySelect(0,TimeCurrent());
+   TotalNumberOfDeals = HistoryOrdersTotal();
+   uint i = 0;
+   for(uint i = 0;i<TotalNumberOfDeals-1;i++)
+   {
+      if((TicketNumber=HistoryOrderGetTicket(i))>0)
+      {
+         stoplosss = HistoryOrderGetDouble(TicketNumber,ORDER_SL);
+         takeprofitt = HistoryOrderGetDouble(TicketNumber,ORDER_TP);
+      }
+   }
+   if((TicketNumber=HistoryOrderGetTicket(i))>0){
+      closePrice = HistoryDealGetDouble(HistoryOrderGetTicket(HistoryOrdersTotal()-1),DEAL_PRICE); 
+      OrderProfit = HistoryDealGetDouble(HistoryOrderGetTicket(HistoryOrdersTotal()-1),DEAL_PROFIT);
+   }
+   openPrice = closePrice - (OrderProfit/10.0);
+   if(info == "SL/TP"){
+      if(OrderProfit > 0)  info = "TP";
+      else info = "SL";
+   }        
+   FileWrite(filehandle2,openTime,closeTime,openPrice,closePrice,stoplosss,takeprofitt,OrderProfit,info);
+ }
